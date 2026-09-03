@@ -50,7 +50,7 @@ Weather and light are separate layers, so a snowy night or a foggy dawn both wor
 
 ## Live weather
 
-The Live pill appears when the page can fetch. It uses [Open-Meteo](https://open-meteo.com/), which needs no API key. On first use, choose **Use my location** for a one-time browser prompt, or type a city. Your choice is kept in this browser's local storage and sent only to Open-Meteo with each forecast request, refreshed every fifteen minutes.
+The Live pill appears when the page can fetch. It uses [Open-Meteo](https://open-meteo.com/), which needs no API key. On first use, choose **Use my location** for a one-time browser prompt, or type a city. Your choice is kept in this browser's local storage and sent to Open-Meteo with each forecast request, refreshed every fifteen minutes. When you use the browser prompt, the coordinates are also sent once to [BigDataCloud](https://www.bigdatacloud.com/) to turn them into a place name, since Open-Meteo has no reverse lookup.
 
 The current conditions map onto the scene: thunderstorms become Storm, snow codes become Snow, rain and drizzle become Rain, fog codes become Fog, and clear skies become Calm or Breeze depending on wind. Wind speed then scales the swell and the flags, and cloud cover sets how many clouds drift through. Sunrise and sunset from the same forecast drive the Auto light. Pick any other weather pill to override, and Live to hand control back.
 

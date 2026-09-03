@@ -1211,6 +1211,7 @@
   // ---------------------------------------------------------------------------
   const API = 'https://api.open-meteo.com/v1/forecast';
   const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
+  const REV = 'https://api.bigdatacloud.net/data/reverse-geocode-client';
   const REFRESH_MS = 15 * 60 * 1000;
   const liveEl = document.getElementById('live');
   const liveText = document.getElementById('liveText');
@@ -1274,6 +1275,26 @@
     }
   }
   function saveLocation() { store.set('zephyrus.location', live.location); }
+  // Turn coordinates into "Town, ST" (or "Town, Country"). Open-Meteo has no
+  // reverse lookup, so this is the one other service the page talks to.
+  async function placeName(lat, lon) {
+    try {
+      const r = await fetch(`${REV}?latitude=${lat}&longitude=${lon}&localityLanguage=en`);
+      if (!r.ok) return '';
+      const j = await r.json();
+      const town = j.locality || j.city || j.principalSubdivision || j.countryName || '';
+      const us = /^US-([A-Z]{2})$/.exec(j.principalSubdivisionCode || '');
+      const region = us ? us[1] : (j.countryName || '');
+      return town ? (region && region !== town ? `${town}, ${region}` : town) : '';
+    } catch (e) {
+      return '';
+    }
+  }
+  async function nameLocation() {
+    const loc = live.location;
+    const name = await placeName(loc.lat, loc.lon);
+    if (name && live.location === loc) { loc.name = name; loc.named = true; saveLocation(); renderLive(); }
+  }
   function setLive() {
     if (!live.available) return;
     if (!live.location) { live.state = 'setup'; renderLive(); return; }
@@ -1314,9 +1335,11 @@
   }
   function locate() {
     live.state = 'locating'; renderLive();
-    navigator.geolocation.getCurrentPosition((pos) => {
-      live.location = { lat: Number(pos.coords.latitude.toFixed(2)), lon: Number(pos.coords.longitude.toFixed(2)), name: '' };
-      saveLocation(); weatherMode = 'live'; updatePills(); refreshLive();
+    navigator.geolocation.getCurrentPosition(async (pos) => {
+      live.location = { lat: Number(pos.coords.latitude.toFixed(2)), lon: Number(pos.coords.longitude.toFixed(2)), name: '', named: false };
+      saveLocation(); weatherMode = 'live'; updatePills();
+      await nameLocation();
+      refreshLive();
     }, () => {
       live.state = 'city'; live.error = ''; renderLive();
     }, { timeout: 12000, maximumAge: 600000 });
@@ -1329,7 +1352,7 @@
       const j = await r.json();
       const hit = j.results && j.results[0];
       if (!hit) { live.state = 'city'; renderLive(); cityInput.value = q; cityInput.placeholder = 'City not found'; cityInput.focus(); return; }
-      live.location = { lat: hit.latitude, lon: hit.longitude, name: hit.admin1 ? `${hit.name}, ${hit.admin1}` : hit.name };
+      live.location = { lat: hit.latitude, lon: hit.longitude, name: hit.admin1 ? `${hit.name}, ${hit.admin1}` : hit.name, named: true };
       saveLocation(); weatherMode = 'live'; updatePills(); refreshLive();
     } catch (e) {
       live.state = 'city'; renderLive();
@@ -1350,7 +1373,9 @@
     livePill.hidden = false;
     live.location = store.get('zephyrus.location');
     if (live.location && typeof live.location.lat === 'number' && typeof live.location.lon === 'number') {
-      weatherMode = 'live'; updatePills(); refreshLive();
+      weatherMode = 'live'; updatePills();
+      if (!live.location.named) await nameLocation();
+      refreshLive();
     } else {
       live.location = null; live.state = 'setup'; renderLive();
     }
