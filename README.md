@@ -31,7 +31,7 @@ The current conditions map onto the scene: thunderstorms become Storm, snow code
 
 Click the temperature to switch between Celsius and Fahrenheit. Click the place name to change location.
 
-The version published as a claude.ai artifact runs under a content security policy that blocks network requests, so it has no Live pill.
+If the page is opened somewhere that blocks network requests, the Live pill stays hidden and the six manual weathers still work.
 
 ## Scene notes
 
