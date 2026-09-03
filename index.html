@@ -4,7 +4,8 @@
 <meta charset="utf-8">
 <title>H.M.S. Zephyrus</title>
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src 'self' https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.bigdatacloud.net; img-src 'self' data:;">
+<!-- Egress allowlist. Any new host goes here and in README "Live weather". -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline' https://cdnjs.cloudflare.com; style-src 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; connect-src https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.bigdatacloud.net;">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700&family=Cormorant+Garamond:ital,wght@1,500&family=Jost:wght@400;500&display=swap">
 <style>
@@ -134,6 +135,8 @@
     .weather .row { flex-wrap: wrap; gap: 4px 8px; }
     .weather .pills { flex-wrap: wrap; }
     .live { justify-content: flex-start; }
+    .live .linkish { padding: 6px 2px; }
+    .live #clearLoc { margin-left: auto; }
     .hud.bl { left: 10px; right: 10px; bottom: calc(10px + env(safe-area-inset-bottom)); }
     .clock { flex-direction: row; align-items: center; justify-content: space-between; gap: 10px; padding: 8px 12px; min-width: 0; }
     .clock .stamp { gap: 3px; }
@@ -172,7 +175,7 @@
       <span class="eyebrow">Weather</span>
       <div class="pills" id="pills"></div>
     </div>
-    <div class="live" id="live" hidden>
+    <div class="live" id="live">
       <span id="liveText"></span>
       <button type="button" class="linkish" id="livePlace" hidden title="Change location"></button>
       <button type="button" class="linkish" id="liveTemp" hidden title="Switch units"></button>
@@ -182,8 +185,8 @@
         <input id="cityInput" placeholder="City" aria-label="City" autocomplete="off">
         <button type="submit" class="pill">Set</button>
       </form>
-      <button type="button" class="linkish dim" id="clearLoc" hidden title="Forget saved location">✕ Forget</button>
       <a href="https://open-meteo.com/" target="_blank" rel="noopener noreferrer" class="linkish dim" id="liveSource" hidden title="Weather data by Open-Meteo">via Open-Meteo</a>
+      <button type="button" class="linkish dim" id="clearLoc" hidden title="Forget saved location">✕ Forget</button>
     </div>
   </div>
   <div class="card label" id="camLabel"><strong>Touring</strong> &nbsp;–&nbsp; drag to take control</div>
@@ -1111,7 +1114,8 @@
   };
   // Sunrise and sunset as decimal hours, local time. A location-aware
   // source can overwrite these later; until then this is a temperate default.
-  const solar = { sunrise: 6.5, sunset: 19.5, dusk: 0.35, utcOffset: null };
+  const SOLAR_DEFAULT = { sunrise: 6.5, sunset: 19.5, dusk: 0.35, utcOffset: null };
+  const solar = { ...SOLAR_DEFAULT };
   const LIGHT_MODES = ['auto', 'day', 'night'];
   let lightMode = 'auto';
   let night = 0;
@@ -1172,7 +1176,6 @@
   livePill.type = 'button';
   livePill.className = 'pill';
   livePill.textContent = 'Live';
-  livePill.hidden = true;
   livePill.setAttribute('aria-pressed', 'false');
   livePill.addEventListener('click', () => setLive());
   pillsEl.appendChild(livePill);
@@ -1209,8 +1212,8 @@
   }
 
   // ---------------------------------------------------------------------------
-  // Live weather from Open-Meteo. Only possible where the page is allowed to
-  // fetch (a normal web host or a local file); otherwise the Live pill stays hidden.
+  // Live weather from Open-Meteo. Where the page cannot reach the network the
+  // Live row says so and the six manual weathers still work.
   // Your location is kept in this browser's local storage and sent only to
   // Open-Meteo with each forecast request.
   // ---------------------------------------------------------------------------
@@ -1218,7 +1221,6 @@
   const GEO = 'https://geocoding-api.open-meteo.com/v1/search';
   const REV = 'https://api.bigdatacloud.net/data/reverse-geocode-client';
   const REFRESH_MS = 15 * 60 * 1000;
-  const liveEl = document.getElementById('live');
   const liveText = document.getElementById('liveText');
   const livePlace = document.getElementById('livePlace');
   const liveTemp = document.getElementById('liveTemp');
@@ -1228,11 +1230,13 @@
   const cityInput = document.getElementById('cityInput');
   const clearLoc = document.getElementById('clearLoc');
   const liveSource = document.getElementById('liveSource');
-  const live = { available: false, state: 'setup', location: null, data: null, error: '', fetchedAt: 0, ampScale: 1, cover: null };
+  const LOCATION_KEY = 'zephyrus.location';
+  const live = { state: 'setup', location: null, data: null, error: '', fetchedAt: 0, ampScale: 1, cover: null };
   let liveMix = 0;
   const store = {
     get(k) { try { return JSON.parse(localStorage.getItem(k)); } catch (e) { return null; } },
     set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) { /* storage may be unavailable */ } },
+    remove(k) { try { localStorage.removeItem(k); } catch (e) { /* storage may be unavailable */ } },
   };
   let useF = (() => {
     const u = store.get('zephyrus.units');
@@ -1255,45 +1259,41 @@
   const fmtTemp = (c) => (useF ? `${Math.round(c * 9 / 5 + 32)}°F` : `${Math.round(c)}°C`);
 
   function renderLive() {
-    liveEl.hidden = !live.available;
-    if (!live.available) return;
     const st = live.state;
     const hasGeo = 'geolocation' in navigator;
-    livePlace.hidden = liveTemp.hidden = liveDesc.hidden = useGeo.hidden = cityForm.hidden = clearLoc.hidden = liveSource.hidden = true;
+    livePlace.hidden = liveTemp.hidden = liveDesc.hidden = useGeo.hidden = cityForm.hidden = true;
+    clearLoc.hidden = !live.location || st === 'locating' || st === 'loading';
+    liveSource.hidden = st !== 'ready';
     if (st === 'setup') {
       liveText.textContent = 'Live weather:';
       useGeo.hidden = !hasGeo; cityForm.hidden = false;
     } else if (st === 'city') {
-      liveText.textContent = 'Location:';
+      liveText.textContent = live.error ? `Live · ${live.error} ·` : 'Location:';
       useGeo.hidden = !hasGeo; cityForm.hidden = false;
-      if (live.location) clearLoc.hidden = false;
     } else if (st === 'locating') {
       liveText.textContent = 'Live · finding your location…';
     } else if (st === 'loading') {
       liveText.textContent = 'Live · fetching…';
     } else if (st === 'error') {
       liveText.textContent = `Live · ${live.error} ·`;
-      livePlace.hidden = false; livePlace.textContent = (live.location && live.location.name) || 'change location';
-      if (live.location) clearLoc.hidden = false;
+      livePlace.hidden = false; livePlace.textContent = live.location.name || 'change location';
     } else {
       const d = live.data;
       liveText.textContent = weatherMode === 'live' ? 'Live ·' : 'Live paused ·';
       livePlace.hidden = false; livePlace.textContent = live.location.name;
       liveTemp.hidden = false; liveTemp.textContent = fmtTemp(d.temp);
       liveDesc.hidden = false; liveDesc.textContent = `· ${wmoName(d.code)}`;
-      clearLoc.hidden = false;
-      liveSource.hidden = false;
     }
   }
-  function saveLocation() { store.set('zephyrus.location', live.location); }
+  function saveLocation() { store.set(LOCATION_KEY, live.location); }
+  // Forget everything derived from the location, not just the location itself.
   function clearLocation() {
-    live.location = null;
-    live.data = null;
-    try { localStorage.removeItem('zephyrus.location'); } catch (e) {}
-    weatherMode = 'manual';
-    updatePills();
+    live.location = null; live.data = null; live.error = ''; live.fetchedAt = 0;
+    live.ampScale = 1; live.cover = null;
     live.state = 'setup';
-    renderLive();
+    store.remove(LOCATION_KEY);
+    Object.assign(solar, SOLAR_DEFAULT);
+    setWeather(weatherIndex);
   }
   // Turn coordinates into "Town, ST" (or "Town, Country"). Open-Meteo has no
   // reverse lookup, so this is the one other service the page talks to.
@@ -1316,10 +1316,10 @@
     if (name && live.location === loc) { loc.name = name; loc.named = true; saveLocation(); renderLive(); }
   }
   function setLive() {
-    if (!live.available) return;
     if (!live.location) { live.state = 'setup'; renderLive(); return; }
     weatherMode = 'live';
-    applyLive();
+    if (live.data && live.state !== 'error') applyLive();
+    else if (live.state !== 'loading') refreshLive();
     updatePills();
     renderLive();
   }
@@ -1341,6 +1341,7 @@
       const r = await fetch(url);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
+      if (live.location !== loc) return;
       live.data = { temp: j.current.temperature_2m, code: j.current.weather_code, wind: j.current.wind_speed_10m, cover: j.current.cloud_cover, isDay: j.current.is_day };
       if (!loc.name) { loc.name = String(j.timezone || '').split('/').pop().replace(/_/g, ' ') || 'Your location'; saveLocation(); }
       const hours = (iso) => { const m = /T(\d\d):(\d\d)/.exec(String(iso)); return m ? Number(m[1]) + Number(m[2]) / 60 : null; };
@@ -1348,9 +1349,12 @@
       if (sr !== null && ss !== null) { solar.sunrise = sr; solar.sunset = ss; solar.utcOffset = j.utc_offset_seconds; }
       live.fetchedAt = Date.now(); live.state = 'ready'; live.error = '';
     } catch (e) {
+      if (live.location !== loc) return;
       live.state = 'error'; live.error = 'weather unavailable';
+      if (!live.data) weatherMode = 'manual';
     }
     if (weatherMode === 'live') applyLive();
+    updatePills();
     renderLive();
   }
   function locate() {
@@ -1371,36 +1375,32 @@
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const j = await r.json();
       const hit = j.results && j.results[0];
-      if (!hit) { live.state = 'city'; renderLive(); cityInput.value = q; cityInput.placeholder = 'City not found'; cityInput.focus(); return; }
+      if (!hit) { live.state = 'city'; live.error = 'city not found'; renderLive(); cityInput.value = q; cityInput.focus(); return; }
       live.location = { lat: hit.latitude, lon: hit.longitude, name: hit.admin1 ? `${hit.name}, ${hit.admin1}` : hit.name, named: true };
       saveLocation(); weatherMode = 'live'; updatePills(); refreshLive();
     } catch (e) {
-      live.state = 'city'; renderLive();
+      live.state = 'city'; live.error = 'lookup unavailable'; renderLive(); cityInput.value = q; cityInput.focus();
     }
   }
   useGeo.addEventListener('click', locate);
   cityForm.addEventListener('submit', (e) => { e.preventDefault(); const q = cityInput.value.trim(); if (q) setCity(q); });
-  livePlace.addEventListener('click', () => { live.state = 'city'; cityInput.value = ''; cityInput.placeholder = 'City'; renderLive(); cityInput.focus(); });
+  livePlace.addEventListener('click', () => { live.state = 'city'; live.error = ''; cityInput.value = ''; renderLive(); cityInput.focus(); });
   liveTemp.addEventListener('click', () => { useF = !useF; store.set('zephyrus.units', useF ? 'F' : 'C'); renderLive(); });
   clearLoc.addEventListener('click', clearLocation);
-  async function probeLive() {
-    live.location = store.get('zephyrus.location');
-    if (live.location && typeof live.location.lat === 'number' && typeof live.location.lon === 'number') {
-      live.available = true;
-      livePill.hidden = false;
+  function restoreLocation() {
+    const saved = store.get(LOCATION_KEY);
+    if (saved && typeof saved.lat === 'number' && typeof saved.lon === 'number') {
+      live.location = saved;
       weatherMode = 'live';
       updatePills();
-      if (!live.location.named) await nameLocation();
+      if (!saved.named) nameLocation();
       refreshLive();
     } else {
-      live.location = null;
-      live.available = typeof fetch === 'function';
-      livePill.hidden = !live.available;
       live.state = 'setup';
       renderLive();
     }
   }
-  probeLive();
+  restoreLocation();
   setInterval(() => { if (live.location && live.state !== 'loading') refreshLive(); }, REFRESH_MS);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden && live.location && Date.now() - live.fetchedAt > REFRESH_MS && live.state !== 'loading') refreshLive();
