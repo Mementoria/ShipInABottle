@@ -72,3 +72,7 @@ If the page is opened somewhere that blocks network requests, the Live pill stay
 - Built by Marc with Claude Fable 5.1 in Claude Code
 - Launch details: [Anthropic's announcement](https://www.anthropic.com/claude-fable-and-mythos-5-1)
 - Weather data: [Open-Meteo](https://open-meteo.com/)
+
+## Notice & Disclaimer
+
+This project is an independent educational recreation and technical study inspired by the screenshot of wick's ([@holytrinity](https://x.com/holytrinity)) demo. It is shared strictly for educational and demonstrative purposes. No ownership or proprietary rights are claimed over the original concept or visual design.
